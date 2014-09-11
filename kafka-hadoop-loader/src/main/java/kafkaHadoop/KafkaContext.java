@@ -219,60 +219,55 @@ public class KafkaContext implements Closeable {
         }
         @Override
         public void run() {
+            int numErrors = 0;
             while (!stop) {
-                if (fetchResponse == null) {
-//                    FetchRequest request =
-//                            new FetchRequest(topic, partition, offset, fetchSize);
-//
-//                    LOG.info("fetching offset {}", offset);
-//                    messages = consumer.fetch(request);
-                    FetchRequest req = new FetchRequestBuilder()
-                            .clientId(clientName)
-                            .addFetch(topic, partition, offset, fetchSize)
-                            .build();
-                    fetchResponse = consumer.fetch(req);
-                }
+                FetchRequest req = new FetchRequestBuilder()
+                        .clientId(clientName)
+                        .addFetch(topic, partition, offset, fetchSize)
+                        .build();
+                FetchResponse fetchResponse = consumer.fetch(req);
 
-                if (!fetchResponse.hasError()) {
-                    if (!queue.offer(messages)){
-                        try {
-                            Thread.sleep(100);
-                        } catch (InterruptedException e) {
-                        }
+                if (fetchResponse.hasError()) {
+                    numErrors++;
+                    // Something went wrong!
+                    short code = fetchResponse.errorCode(topic, partition);
+                    System.out.println("Error fetching data from the Broker, Reason: " + code);
+                    if (numErrors > 5) {
+                        stopped = true;
+                        break;
+                    }
+                    if (code == ErrorMapping.OffsetOutOfRangeCode()) {
+                        // We asked for an invalid offset. For simple case ask for the last element to reset
+                        offset = getLastOffset(consumer, topic, partition, kafka.api.OffsetRequest.LatestTime(), clientName);
+                    } else {
+                        stop = true;
+                    }
+                    continue;
+                }
+                numErrors = 0;
+
+                long numRead = 0;
+                for (MessageAndOffset messageAndOffset : fetchResponse.messageSet(topic, partition)) {
+                    long currentOffset = messageAndOffset.offset();
+                    if (currentOffset < offset) {
+                        System.out.println("Found an old offset: " + currentOffset + " Expecting: " + offset);
                         continue;
                     }
-                    hasData = true;
+                    offset = messageAndOffset.nextOffset();
+                    ByteBuffer payload = messageAndOffset.message().payload();
 
-                    for (MessageAndOffset messageAndOffset : fetchResponse.messageSet(topic, partition)) {
-                        long currentOffset = messageAndOffset.offset();
-                        if (currentOffset < offset) {
-                            System.out.println("Found an old offset: " + currentOffset + " Expecting: " + offset);
-                            continue;
-                        }
-                        offset = messageAndOffset.nextOffset();
-//                        ByteBuffer payload = messageAndOffset.message().payload();
-//
-//                        byte[] bytes = new byte[payload.limit()];
-//                        payload.get(bytes);
-                        //System.out.println(String.valueOf(messageAndOffset.offset()) + ": " + new String(bytes, "UTF-8"));
-                        //LOG.info(String.valueOf(messageAndOffset.offset()) + ": " + new String(bytes, "UTF-8"));
-                    }
+                    byte[] bytes = new byte[payload.limit()];
+                    payload.get(bytes);
+                    System.out.println(String.valueOf(messageAndOffset.offset()) + ": " + new String(bytes, "UTF-8"));
+                    numRead++;
+                }
 
-                    //offset += messages.validBytes(); // next offset to fetch
-                    //LOG.info("Valid bytes {} {}", messages.validBytes(), stop);
-                    messages = null;
-                } else {
-                    short code = fetchResponse.errorCode(this.topic, this.partition);
-                    LOG.error("Error fetching data from the Broker  Reason: " + code);
-                    if (hasData && code == ErrorMapping.OffsetOutOfRangeCode()) {
-                        stop = true;
-                        LOG.info("No More Data");
-                    } else {
-                        while (!queue.offer(messages));
-                        stop = true;
+                if (numRead == 0) {
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ie) {
                     }
                 }
-                stopped = true;
 
 //                int code = messages.getErrorCode();
 //                if (code == 0) {

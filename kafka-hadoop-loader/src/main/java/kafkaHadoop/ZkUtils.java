@@ -57,6 +57,8 @@ public class ZkUtils implements Closeable {
         if (brokers == null) {
             brokers = new HashMap<String, String>();
             List<String> brokerIds = getChildrenParentMayNotExist(BROKER_IDS_PATH);
+System.out.println("----------------------------------------------");
+System.out.println(brokerIds);
             for(String bid: brokerIds) {
                 String data = client.readData(BROKER_IDS_PATH + "/" + bid);
                 LOG.info("Broker " + bid + " " + data);
@@ -69,9 +71,15 @@ public class ZkUtils implements Closeable {
     public List<String> getPartitions(String topic) {
         List<String> partitions = new ArrayList<String>();
         List<String> brokersTopics = getChildrenParentMayNotExist( BROKER_TOPICS_PATH + "/" + topic);
+System.out.println("----------------------------------------------");
+System.out.println(brokersTopics);
         for(String broker: brokersTopics) {
             String parts = client.readData(BROKER_TOPICS_PATH + "/" + topic + "/" + broker);
+System.out.println("----------------------------------------------");
+System.out.println(BROKER_TOPICS_PATH + "/" + topic + "/" + broker);
+System.out.println(parts);
             for(int i =0; i< Integer.valueOf(parts); i++) {
+                //for(int i =0; i< Integer.valueOf("0"); i++) {
                 partitions.add(broker + "-" + i);
             }
         }
@@ -125,6 +133,8 @@ public class ZkUtils implements Closeable {
     private List<String> getChildrenParentMayNotExist(String path) {
         try {
             List<String> children = client.getChildren(path);
+System.out.println("----------------------------------------------");
+System.out.println(children);
             return children;
         } catch (ZkNoNodeException e) {
             return new ArrayList<String>();

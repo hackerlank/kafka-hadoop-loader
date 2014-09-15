@@ -121,10 +121,10 @@ public class KafkaContext implements Closeable {
         while(!fetcher.stop || !queue.isEmpty()) {
             messages = queue.poll();
             if (messages != null) {
-                int code = messages.getErrorCode();
-                if (code != 0) {
-                    ErrorMapping.maybeThrowException(code);
-                }
+//                int code = messages.getErrorCode();
+//                if (code != 0) {
+//                    ErrorMapping.maybeThrowException(code);
+//                }
                 iterator = messages.iterator();
                 break;
             }

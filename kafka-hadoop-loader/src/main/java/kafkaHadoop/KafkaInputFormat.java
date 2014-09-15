@@ -46,7 +46,7 @@ public class KafkaInputFormat extends InputFormat<LongWritable, BytesWritable> {
         for(String partition: partitions) {
             String[] sp = partition.split("-");
 
-            long last = zk.getLastCommit(group, topic, partition) ;
+            long last = zk.getLastCommit(group, topic, partition);
             InputSplit split = new KafkaSplit(sp[0], zk.getBroker(sp[0]), topic, Integer.valueOf(sp[1]), last);
             splits.add(split);
         }

@@ -53,7 +53,7 @@ public class KafkaContext implements Closeable {
                         String reset) {
 
         String[] sp = broker.split(":"); // broker-id:host:port
-        consumer = new SimpleConsumer(sp[1], Integer.valueOf(sp[2]), timeout, bufferSize, "testtesttesttesttesttesttesttest");
+        consumer = new SimpleConsumer(sp[1], Integer.valueOf(sp[2]), timeout, bufferSize, clientName);
         this.topic = topic;
         this.partition = partition;
         this.startOffset = lastCommit;
@@ -227,70 +227,74 @@ public class KafkaContext implements Closeable {
                         .build();
                 FetchResponse fetchResponse = consumer.fetch(req);
 
-                if (fetchResponse.hasError()) {
-                    numErrors++;
-                    // Something went wrong!
-                    short code = fetchResponse.errorCode(topic, partition);
-                    System.out.println("Error fetching data from the Broker, Reason: " + code);
-                    if (numErrors > 5) {
-                        stopped = true;
-                        break;
-                    }
-                    if (code == ErrorMapping.OffsetOutOfRangeCode()) {
-                        // We asked for an invalid offset. For simple case ask for the last element to reset
-                        offset = getLastOffset(consumer, topic, partition, kafka.api.OffsetRequest.LatestTime(), clientName);
-                    } else {
-                        stop = true;
-                    }
-                    continue;
-                }
-                numErrors = 0;
+//                if (fetchResponse.hasError()) {
+//                    numErrors++;
+//                    // Something went wrong!
+//                    short code = fetchResponse.errorCode(topic, partition);
+//                    System.out.println("Error fetching data from the Broker, Reason: " + code);
+//                    if (numErrors > 5) {
+//                        stopped = true;
+//                        break;
+//                    }
+//                    if (code == ErrorMapping.OffsetOutOfRangeCode()) {
+//                        // We asked for an invalid offset. For simple case ask for the last element to reset
+//                        offset = getLastOffset(consumer, topic, partition, kafka.api.OffsetRequest.LatestTime(), clientName);
+//                    } else {
+//                        stop = true;
+//                    }
+//                    continue;
+//                }
+//                numErrors = 0;
 
-                long numRead = 0;
-                for (MessageAndOffset messageAndOffset : fetchResponse.messageSet(topic, partition)) {
-                    long currentOffset = messageAndOffset.offset();
-                    if (currentOffset < offset) {
-                        System.out.println("Found an old offset: " + currentOffset + " Expecting: " + offset);
-                        continue;
-                    }
-                    offset = messageAndOffset.nextOffset();
-                    ByteBuffer payload = messageAndOffset.message().payload();
-
-                    byte[] bytes = new byte[payload.limit()];
-                    payload.get(bytes);
-                    System.out.println(String.valueOf(messageAndOffset.offset()) + ": " + new String(bytes, "UTF-8"));
-                    numRead++;
-                }
-
-                if (numRead == 0) {
-                    try {
-                        Thread.sleep(1000);
-                    } catch (InterruptedException ie) {
-                    }
-                }
-
-//                int code = messages.getErrorCode();
-//                if (code == 0) {
-//                    if (!queue.offer(messages)){
-//                        try {
-//                            Thread.sleep(100);
-//                        } catch (InterruptedException e) {
-//                        }
+//                long numRead = 0;
+//                for (MessageAndOffset messageAndOffset : fetchResponse.messageSet(topic, partition)) {
+//                    long currentOffset = messageAndOffset.offset();
+//                    if (currentOffset < offset) {
+//                        System.out.println("Found an old offset: " + currentOffset + " Expecting: " + offset);
 //                        continue;
 //                    }
-//                    hasData = true;
-//                    offset += messages.validBytes(); // next offset to fetch
-//                    //LOG.info("Valid bytes {} {}", messages.validBytes(), stop);
-//                    messages = null;
-//                } else if (hasData && code == ErrorMapping.OffsetOutOfRangeCode()) {
-//                    // no more data
-//                    //queue.notify();
-//                    stop = true;
-//                    LOG.info("No More Data");
-//                } else {
-//                    while (!queue.offer(messages));
-//                    stop = true;
+//                    offset = messageAndOffset.nextOffset();
+//                    ByteBuffer payload = messageAndOffset.message().payload();
+//
+//                    byte[] bytes = new byte[payload.limit()];
+//                    payload.get(bytes);
+//                    System.out.println(String.valueOf(messageAndOffset.offset()) + ": " + new String(bytes, "UTF-8"));
+//                    numRead++;
 //                }
+//
+//                if (numRead == 0) {
+//                    try {
+//                        Thread.sleep(1000);
+//                    } catch (InterruptedException ie) {
+//                    }
+//                }
+
+                messages = fetchResponse.messageSet(topic, partition);
+
+                //int code = messages.getErrorCode();
+                int code = fetchResponse.errorCode(topic, partition);
+                //if (code == 0) {
+                if (!fetchResponse.hasError()) {
+                    if (!queue.offer(messages)){
+                        try {
+                            Thread.sleep(100);
+                        } catch (InterruptedException e) {
+                        }
+                        continue;
+                    }
+                    hasData = true;
+                    offset += messages.validBytes(); // next offset to fetch
+                    //LOG.info("Valid bytes {} {}", messages.validBytes(), stop);
+                    messages = null;
+                } else if (hasData && code == ErrorMapping.OffsetOutOfRangeCode()) {
+                    // no more data
+                    //queue.notify();
+                    stop = true;
+                    LOG.info("No More Data");
+                } else {
+                    while (!queue.offer(messages));
+                    stop = true;
+                }
             }
             stopped = true;
         }

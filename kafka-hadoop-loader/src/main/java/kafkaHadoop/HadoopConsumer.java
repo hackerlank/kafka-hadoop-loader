@@ -71,7 +71,9 @@ public class HadoopConsumer extends Configured implements Tool {
         conf.setInt("kafka.limit", Integer.valueOf(cmd.getOptionValue("limit", "-1")));
 
         conf.setBoolean("mapred.map.tasks.speculative.execution", false);
-
+System.out.println("+++++++++++++++++++++");
+System.out.println(conf);
+System.out.println("+++++++++++++++++++++");
 
         Job job = new Job(conf, "Kafka.Consumer");
         job.setJarByClass(getClass());

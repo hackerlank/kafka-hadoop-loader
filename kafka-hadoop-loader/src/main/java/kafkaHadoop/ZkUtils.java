@@ -2,10 +2,8 @@ package kafkaHadoop;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,39 +48,67 @@ public class ZkUtils implements Closeable {
         String zk = config.get("kafka.zk.connect");
         int stimeout = config.getInt("kafka.zk.sessiontimeout.ms", 10000);
         int ctimeout = config.getInt("kafka.zk.connectiontimeout.ms", 10000);
+//System.out.println("+++++++++++++++");
+//System.out.println(zk);
+//System.out.println(stimeout);
+//System.out.println(ctimeout);
+//System.out.println("+++++++++++++++");
         client = new ZkClient(zk, stimeout, ctimeout, new StringSerializer() );
+//System.out.println("*****************");
+//System.out.println(client);
     }
 
     public String getBroker(String id) {
         if (brokers == null) {
             brokers = new HashMap<String, String>();
             List<String> brokerIds = getChildrenParentMayNotExist(BROKER_IDS_PATH);
-System.out.println("----------------------------------------------");
-System.out.println(brokerIds);
+//System.out.println("----------------------------------------------");
+//System.out.println(brokerIds);
             for(String bid: brokerIds) {
                 String data = client.readData(BROKER_IDS_PATH + "/" + bid);
                 LOG.info("Broker " + bid + " " + data);
-                brokers.put(bid, data.split(":", 2)[1]);
+                //brokers.put(bid, data.split(":", 2)[1]);
+                String[] binfo = data.split(",");
+                String host_str = binfo[2];
+                String[] hostinfo = host_str.split(":");
+                String host = hostinfo[1];
+                brokers.put(bid, host + ":" + data.split(":", 6)[5]);
             }
         }
+System.out.println(brokers);
         return brokers.get(id);
     }
 
     public List<String> getPartitions(String topic) {
+System.out.println(client.readData(BROKER_TOPICS_PATH+"/test2"));
+//System.out.println(client.readData(BROKER_IDS_PATH+"/0"));
+
+//String temp = "testtesttest";
+//client.createPersistent("/aabbccddee", temp);
+//String readBytes = client.readData("/aabbccddee");
+//System.out.println(readBytes);
+
         List<String> partitions = new ArrayList<String>();
-        List<String> brokersTopics = getChildrenParentMayNotExist( BROKER_TOPICS_PATH + "/" + topic);
-System.out.println("----------------------------------------------");
+        List<String> brokersTopics = getChildrenParentMayNotExist(BROKER_TOPICS_PATH + "/" + topic);
+System.out.println("----------------------1------------------------");
+System.out.println("+++++" + BROKER_TOPICS_PATH + "/" + topic);
 System.out.println(brokersTopics);
+System.out.println("----------------------2------------------------");
+
+
         for(String broker: brokersTopics) {
             String parts = client.readData(BROKER_TOPICS_PATH + "/" + topic + "/" + broker);
-System.out.println("----------------------------------------------");
+            //String parts = client.readData(BROKER_TOPICS_PATH + "/" + topic + "/partitions/" + broker);
+System.out.println("----------------------3------------------------");
 System.out.println(BROKER_TOPICS_PATH + "/" + topic + "/" + broker);
 System.out.println(parts);
+System.out.println("----------------------4------------------------");
             for(int i =0; i< Integer.valueOf(parts); i++) {
-                //for(int i =0; i< Integer.valueOf("0"); i++) {
                 partitions.add(broker + "-" + i);
             }
         }
+System.out.println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
+System.out.println(partitions);
         return partitions;
     }
 
@@ -133,8 +159,6 @@ System.out.println(parts);
     private List<String> getChildrenParentMayNotExist(String path) {
         try {
             List<String> children = client.getChildren(path);
-System.out.println("----------------------------------------------");
-System.out.println(children);
             return children;
         } catch (ZkNoNodeException e) {
             return new ArrayList<String>();

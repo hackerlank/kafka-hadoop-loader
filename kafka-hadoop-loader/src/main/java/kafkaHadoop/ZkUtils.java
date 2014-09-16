@@ -4,6 +4,8 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.*;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,36 +82,54 @@ System.out.println(brokers);
     }
 
     public List<String> getPartitions(String topic) {
-System.out.println(client.readData(BROKER_TOPICS_PATH+"/test2"));
-//System.out.println(client.readData(BROKER_IDS_PATH+"/0"));
-
-//String temp = "testtesttest";
-//client.createPersistent("/aabbccddee", temp);
-//String readBytes = client.readData("/aabbccddee");
-//System.out.println(readBytes);
-
         List<String> partitions = new ArrayList<String>();
-        List<String> brokersTopics = getChildrenParentMayNotExist(BROKER_TOPICS_PATH + "/" + topic);
-System.out.println("----------------------1------------------------");
-System.out.println("+++++" + BROKER_TOPICS_PATH + "/" + topic);
-System.out.println(brokersTopics);
-System.out.println("----------------------2------------------------");
 
+        String topicRegInfo = client.readData(BROKER_TOPICS_PATH + "/" + topic);
+        JSONObject jsonObject = new JSONObject(topicRegInfo);
+        JSONObject partitionObject = jsonObject.getJSONObject("partitions");
+System.out.println(partitionObject);
+        Iterator partitionIterator = partitionObject.keys();
+        while (partitionIterator.hasNext()) {
+            String partitionId = (String) partitionIterator.next();
+            JSONArray pvalue = partitionObject.getJSONArray(partitionId);
 
-        for(String broker: brokersTopics) {
-            String parts = client.readData(BROKER_TOPICS_PATH + "/" + topic + "/" + broker);
-            //String parts = client.readData(BROKER_TOPICS_PATH + "/" + topic + "/partitions/" + broker);
-System.out.println("----------------------3------------------------");
-System.out.println(BROKER_TOPICS_PATH + "/" + topic + "/" + broker);
-System.out.println(parts);
-System.out.println("----------------------4------------------------");
-            for(int i =0; i< Integer.valueOf(parts); i++) {
-                partitions.add(broker + "-" + i);
+            for (int i = 0; i < pvalue.length(); i++) {
+                Integer brokerId = (Integer) pvalue.get(i);
+                partitions.add(brokerId + "-" + partitionId);
             }
         }
-System.out.println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
-System.out.println(partitions);
         return partitions;
+
+//System.out.println(client.readData(BROKER_TOPICS_PATH+"/test2"));
+////System.out.println(client.readData(BROKER_IDS_PATH+"/0"));
+//
+////String temp = "testtesttest";
+////client.createPersistent("/aabbccddee", temp);
+////String readBytes = client.readData("/aabbccddee");
+////System.out.println(readBytes);
+//
+//        List<String> partitions = new ArrayList<String>();
+//        List<String> brokersTopics = getChildrenParentMayNotExist(BROKER_TOPICS_PATH + "/" + topic);
+//System.out.println("----------------------1------------------------");
+//System.out.println("+++++" + BROKER_TOPICS_PATH + "/" + topic);
+//System.out.println(brokersTopics);
+//System.out.println("----------------------2------------------------");
+//
+//
+//        for(String broker: brokersTopics) {
+//            String parts = client.readData(BROKER_TOPICS_PATH + "/" + topic + "/" + broker);
+//            //String parts = client.readData(BROKER_TOPICS_PATH + "/" + topic + "/partitions/" + broker);
+//System.out.println("----------------------3------------------------");
+//System.out.println(BROKER_TOPICS_PATH + "/" + topic + "/" + broker);
+//System.out.println(parts);
+//System.out.println("----------------------4------------------------");
+//            for(int i =0; i< Integer.valueOf(parts); i++) {
+//                partitions.add(broker + "-" + i);
+//            }
+//        }
+//System.out.println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
+//System.out.println(partitions);
+//        return partitions;
     }
 
     private String getOffsetsPath(String group, String topic, String partition) {

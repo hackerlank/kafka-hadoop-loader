@@ -40,14 +40,14 @@
             <version>0.4</version>
         </dependency>
         <dependency>
-            <groupId>com.zkclient</groupId>
-            <artifactId>kafka</artifactId>
-            <version>0.3</version>
-        </dependency>
-        <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-core</artifactId>
             <version>1.2.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20140107</version>
         </dependency>
     </dependencies>
 

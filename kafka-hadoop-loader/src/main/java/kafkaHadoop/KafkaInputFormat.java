@@ -151,6 +151,7 @@ public class KafkaInputFormat extends InputFormat<LongWritable, BytesWritable> {
             int bsize = conf.getInt("kafka.socket.buffersize", 64*1024);
             int fsize = conf.getInt("kafka.fetch.size", 1024 * 1024);
             String reset = conf.get("kafka.autooffset.reset");
+System.out.println("");
             kcontext = new KafkaContext(ksplit.getBrokerId() + ":" + ksplit.getBroker(),
                     ksplit.getTopic(),
                     ksplit.getPartition(),
@@ -216,9 +217,12 @@ public class KafkaInputFormat extends InputFormat<LongWritable, BytesWritable> {
             if (value == null) {
                 value = new BytesWritable();
             }
+System.out.println("==============0===============");
+System.out.println(key + " " + value);
             if (limit < 0 || count < limit) {
 
                 long next = kcontext.getNext(key, value);
+System.out.println("(((((((((((((((((" + next + "))))))))))))))");
                 if (next >= 0) {
                     pos = next;
                     count++;

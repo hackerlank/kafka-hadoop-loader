@@ -22,6 +22,7 @@ public class KafkaOutputFormat<K, V> extends TextOutputFormat<K, V> {
         FileOutputCommitter committer =
                 (FileOutputCommitter) getOutputCommitter(context);
         JobID jobId = context.getJobID();
+
         return new Path(committer.getWorkPath(),
                 getUniqueFile(context, "part-" + jobId.toString().replace("job_", ""),
                         extension));

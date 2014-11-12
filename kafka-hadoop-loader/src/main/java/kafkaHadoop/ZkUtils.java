@@ -64,17 +64,21 @@ public class ZkUtils implements Closeable {
         if (brokers == null) {
             brokers = new HashMap<String, String>();
             List<String> brokerIds = getChildrenParentMayNotExist(BROKER_IDS_PATH);
-//System.out.println("----------------------------------------------");
-//System.out.println(brokerIds);
+System.out.println("----------------------------------------------");
+System.out.println(brokerIds);
             for(String bid: brokerIds) {
                 String data = client.readData(BROKER_IDS_PATH + "/" + bid);
                 LOG.info("Broker " + bid + " " + data);
                 //brokers.put(bid, data.split(":", 2)[1]);
-                String[] binfo = data.split(",");
-                String host_str = binfo[2];
-                String[] hostinfo = host_str.split(":");
-                String host = hostinfo[1];
-                brokers.put(bid, host + ":" + data.split(":", 6)[5]);
+//                String[] binfo = data.split(",");
+//                String host_str = binfo[2];
+//                String[] hostinfo = host_str.split(":");
+//                String host = hostinfo[1];
+//                brokers.put(bid, host + ":" + data.split(":", 6)[5]);
+                JSONObject jsonObject = new JSONObject(data);
+                String host = jsonObject.getString("host");
+                Integer port = jsonObject.getInt("port");
+                brokers.put(bid, host + ":" + port.toString());
             }
         }
 System.out.println(brokers);
@@ -87,6 +91,7 @@ System.out.println(brokers);
         String topicRegInfo = client.readData(BROKER_TOPICS_PATH + "/" + topic);
         JSONObject jsonObject = new JSONObject(topicRegInfo);
         JSONObject partitionObject = jsonObject.getJSONObject("partitions");
+System.out.println("************+++++++++ZKUtils.java+++++++++************");
 System.out.println(partitionObject);
         Iterator partitionIterator = partitionObject.keys();
         while (partitionIterator.hasNext()) {
@@ -98,6 +103,7 @@ System.out.println(partitionObject);
                 partitions.add(brokerId + "-" + partitionId);
             }
         }
+System.out.println(partitions);
         return partitions;
 
 //System.out.println(client.readData(BROKER_TOPICS_PATH+"/test2"));
@@ -169,6 +175,7 @@ System.out.println(partitionObject);
         for(String partition: partitions) {
             String path = getTempOffsetsPath(group, topic, partition);
             String offset = client.readData(path);
+System.out.println("---------------------getTempOffsetsPath---------------------" + path + " " + partition);
             setLastCommit(group, topic, partition, Long.valueOf(offset), false);
             client.delete(path);
         }

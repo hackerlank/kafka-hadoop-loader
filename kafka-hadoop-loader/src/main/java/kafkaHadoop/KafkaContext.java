@@ -51,8 +51,9 @@ public class KafkaContext implements Closeable {
     public KafkaContext(String broker, String topic,
                         int partition, long lastCommit,int fetchSize, int timeout, int bufferSize,
                         String reset) {
-
+this.clientName = "Client_" + topic + "_" + partition;
         String[] sp = broker.split(":"); // broker-id:host:port
+System.out.println("```````````SimpleConsumer params:" + sp[1] + " " + sp[2] + " " + timeout + " " + bufferSize + " " + clientName);
         consumer = new SimpleConsumer(sp[1], Integer.valueOf(sp[2]), timeout, bufferSize, clientName);
         this.topic = topic;
         this.partition = partition;
@@ -101,6 +102,8 @@ public class KafkaContext implements Closeable {
     }
 
     private boolean hasMore() {
+System.out.println("***********hasMore.iterator");
+System.out.println(iterator);
         if (iterator == null) {
             fetchMore();
             if (iterator == null) {
@@ -133,7 +136,6 @@ public class KafkaContext implements Closeable {
 
     public long getNext(LongWritable key, BytesWritable value) throws IOException {
         if ( !hasMore() ) return -1L;
-
         MessageAndOffset messageOffset = iterator.next();
         Message message = messageOffset.message();
 
@@ -145,6 +147,12 @@ public class KafkaContext implements Closeable {
         //value.set(bytes, 0, message.payloadSize());
         ByteBuffer buffer = message.payload();
         value.set(buffer.array(), buffer.arrayOffset(), message.payloadSize());
+System.out.println("+++++++++++++++++++getNext set value+++++++++++++++++++");
+System.out.println(value);
+
+        byte[] bytes = new byte[buffer.limit()];
+        buffer.get(bytes);
+System.out.println(String.valueOf(new String(bytes, "UTF-8")));
 
         return curOffset;
     }
@@ -206,7 +214,7 @@ public class KafkaContext implements Closeable {
         boolean hasData = false;
         ByteBufferMessageSet messages = null;
         FetchResponse fetchResponse = null;
-        String clientName = "testtesttesttest";
+        String clientName;// = "testtesttesttest";
 
         public FetchThread(SimpleConsumer consumer, ArrayBlockingQueue<ByteBufferMessageSet> queue,
                            String topic, int partition, long offset, int fetchSize) {
@@ -216,11 +224,14 @@ public class KafkaContext implements Closeable {
             this.fetchSize = fetchSize;
             this.consumer = consumer;
             this.queue = queue;
+            this.clientName = "Client_" + topic + "_" + partition;
         }
         @Override
         public void run() {
             int numErrors = 0;
             while (!stop) {
+//System.out.println("%%%%%%%%%%%%%%%%%%%%%FetchRequest params:" + clientName + " " + topic + " " + partition + " " + offset + " " + fetchSize);
+
                 FetchRequest req = new FetchRequestBuilder()
                         .clientId(clientName)
                         .addFetch(topic, partition, offset, fetchSize)
@@ -269,8 +280,28 @@ public class KafkaContext implements Closeable {
 //                    }
 //                }
 
-                messages = fetchResponse.messageSet(topic, partition);
+//                for (MessageAndOffset messageAndOffset : fetchResponse.messageSet(topic, partition)) {
+//System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" + topic + " " + partition);
+//                    long currentOffset = messageAndOffset.offset();
+//                    if (currentOffset < offset) {
+//                        System.out.println("Found an old offset: " + currentOffset + " Expecting: " + offset);
+//                        continue;
+//                    }
+//                    offset = messageAndOffset.nextOffset();
+//                    ByteBuffer payload = messageAndOffset.message().payload();
+//
+//                    byte[] bytes = new byte[payload.limit()];
+//                    payload.get(bytes);
+//System.out.println("!!!!!!!!!!!!!!!!!!!^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" + String.valueOf(messageAndOffset.offset()));
+//System.out.println(bytes);
+//                }
 
+
+
+
+                messages = fetchResponse.messageSet(topic, partition);
+//System.out.println("#####################fetchResponse.messageSet###########################");
+//System.out.println(messages);
                 //int code = messages.getErrorCode();
                 int code = fetchResponse.errorCode(topic, partition);
                 //if (code == 0) {
@@ -282,9 +313,10 @@ public class KafkaContext implements Closeable {
                         }
                         continue;
                     }
+//System.out.println(queue);
                     hasData = true;
                     offset += messages.validBytes(); // next offset to fetch
-                    //LOG.info("Valid bytes {} {}", messages.validBytes(), stop);
+                    LOG.info("Valid bytes {} {}", messages.validBytes(), stop);
                     messages = null;
                 } else if (hasData && code == ErrorMapping.OffsetOutOfRangeCode()) {
                     // no more data

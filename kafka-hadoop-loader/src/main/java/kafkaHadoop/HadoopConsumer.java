@@ -1,10 +1,10 @@
 package kafkaHadoop;
 
+import java.io.File;
 import java.io.IOException;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.PosixParser;
@@ -24,10 +24,10 @@ import org.apache.hadoop.util.ToolRunner;
  */
 public class HadoopConsumer extends Configured implements Tool {
 
-    static {
-        Configuration.addDefaultResource("core-site.xml");
-        //Configuration.addDefaultResource("mapred-site.xml");
-    }
+//    static {
+//        Configuration.addDefaultResource("core-site.xml");
+//        Configuration.addDefaultResource("mapred-site.xml");
+//    }
 
     public static class KafkaMapper extends Mapper<LongWritable, BytesWritable, LongWritable, Text> {
         @Override
@@ -36,6 +36,7 @@ public class HadoopConsumer extends Configured implements Tool {
             try {
                 out.set(value.getBytes(),0, value.getLength());
                 context.write(key, out);
+
             } catch (InterruptedException e) {
                 // TODO Auto-generated catch block
                 e.printStackTrace();
@@ -62,20 +63,20 @@ public class HadoopConsumer extends Configured implements Tool {
         //HelpFormatter formatter = new HelpFormatter();
         //formatter.printHelp( "kafka.consumer.hadoop", options );
 
-        Configuration conf = getConf();
-        conf.set("kafka.topic", cmd.getOptionValue("topic", "test"));
+        //Configuration conf = getConf();
+        Configuration conf = new Configuration();
+
+        conf.set("kafka.topic", cmd.getOptionValue("topic", "test2"));
         conf.set("kafka.groupid", cmd.getOptionValue("consumer-group", "test_group"));
         conf.set("kafka.zk.connect", cmd.getOptionValue("zk-connect", "localhost:2182"));
         if (cmd.getOptionValue("autooffset-reset") != null)
             conf.set("kafka.autooffset.reset", cmd.getOptionValue("autooffset-reset"));
         conf.setInt("kafka.limit", Integer.valueOf(cmd.getOptionValue("limit", "-1")));
 
-        conf.setBoolean("mapred.map.tasks.speculative.execution", false);
-System.out.println("+++++++++++++++++++++");
-System.out.println(conf);
-System.out.println("+++++++++++++++++++++");
+        conf.setBoolean("mapred.map.tasks.speculative.execution", true);
 
-        Job job = new Job(conf, "Kafka.Consumer");
+        //Job job = new Job(conf, "Kafka.Consumer");
+        Job job = Job.getInstance(conf, "Kafka.Consumer");
         job.setJarByClass(getClass());
         job.setMapperClass(KafkaMapper.class);
         // input
@@ -90,6 +91,7 @@ System.out.println("+++++++++++++++++++++");
         KafkaOutputFormat.setOutputPath(job, new Path(cmd.getArgs()[0]));
 
         boolean success = job.waitForCompletion(true);
+System.out.println("=====================job_result:" + success + "=====================");
         if (success) {
             commit(conf);
         }

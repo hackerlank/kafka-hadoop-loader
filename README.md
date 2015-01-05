@@ -1,4 +1,7 @@
 kafka-hadoop-loader
 ===================
 
-vergin publish
+virgin publish
+
+Usage:
+hadoop jar kafka-hadoop-loader.jar [-z <zookeeper>] [-t <topic>] [target_hdfs_path]

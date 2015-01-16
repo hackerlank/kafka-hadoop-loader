@@ -2,6 +2,7 @@ package kafkaHadoop;
 
 import java.io.IOException;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileAlreadyExistsException;
 import org.apache.hadoop.mapred.InvalidJobConfException;
@@ -17,19 +18,35 @@ import org.apache.hadoop.mapreduce.security.TokenCache;
  */
 public class KafkaOutputFormat<K, V> extends TextOutputFormat<K, V> {
 
+    /**
+     * 获取默认的输出路径和文件名称（见FileOutputFormat）
+     * @param context
+     * @param extension
+     * @return
+     * @throws IOException
+     */
     public Path getDefaultWorkFile(TaskAttemptContext context,
                                    String extension) throws IOException {
         FileOutputCommitter committer =
                 (FileOutputCommitter) getOutputCommitter(context);
         JobID jobId = context.getJobID();
 
+Configuration conf = context.getConfiguration();
+String topic = conf.get("kafka.topic");
+System.out.println("-------------------*----------------" + topic);
+
         return new Path(committer.getWorkPath(),
                 getUniqueFile(context, "part-" + jobId.toString().replace("job_", ""),
                         extension));
     }
 
+    /**
+     * 判断输出目录是否存在;获取输出目录文件系统的授权token
+     * @param job
+     * @throws FileAlreadyExistsException
+     * @throws IOException
+     */
     public void checkOutputSpecs(JobContext job) throws FileAlreadyExistsException, IOException{
-        // Ensure that the output directory is set and not already there
         Path outDir = getOutputPath(job);
         if (outDir == null) {
             throw new InvalidJobConfException("Output directory not set.");

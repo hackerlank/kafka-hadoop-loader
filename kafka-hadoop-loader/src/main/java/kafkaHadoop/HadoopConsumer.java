@@ -1,6 +1,5 @@
 package kafkaHadoop;
 
-import java.io.File;
 import java.io.IOException;
 
 import org.apache.commons.cli.CommandLine;
@@ -29,12 +28,15 @@ public class HadoopConsumer extends Configured implements Tool {
 //        Configuration.addDefaultResource("mapred-site.xml");
 //    }
 
+    /**
+     * Mapper for Kafka
+     */
     public static class KafkaMapper extends Mapper<LongWritable, BytesWritable, LongWritable, Text> {
         @Override
         public void map(LongWritable key, BytesWritable value, Context context) throws IOException {
             Text out = new Text();
             try {
-                out.set(value.getBytes(),0, value.getLength());
+                out.set(value.getBytes(), 0, value.getLength());
                 context.write(key, out);
 
             } catch (InterruptedException e) {
@@ -46,36 +48,35 @@ public class HadoopConsumer extends Configured implements Tool {
     }
 
     public int run(String[] args) throws Exception {
-
-        //ToolRunner.printGenericCommandUsage(System.err);
-        /*
-        if (args.length < 2) {
-            ToolRunner.printGenericCommandUsage(System.err);
-            return -1;
-        }
-        */
+//        ToolRunner.printGenericCommandUsage(System.err);
+//
+//        if (args.length < 2) {
+//            ToolRunner.printGenericCommandUsage(System.err);
+//            return -1;
+//        }
 
         CommandLineParser parser = new PosixParser();
         Options options = buildOptions();
 
         CommandLine cmd = parser.parse(options, args);
 
-        //HelpFormatter formatter = new HelpFormatter();
-        //formatter.printHelp( "kafka.consumer.hadoop", options );
+//        HelpFormatter formatter = new HelpFormatter();
+//        formatter.printHelp( "kafka.consumer.hadoop", options );
 
-        //Configuration conf = getConf();
+//        Configuration conf = getConf();
         Configuration conf = new Configuration();
 
         conf.set("kafka.topic", cmd.getOptionValue("topic", "test2"));
         conf.set("kafka.groupid", cmd.getOptionValue("consumer-group", "test_group"));
         conf.set("kafka.zk.connect", cmd.getOptionValue("zk-connect", "localhost:2182"));
+
         if (cmd.getOptionValue("autooffset-reset") != null)
             conf.set("kafka.autooffset.reset", cmd.getOptionValue("autooffset-reset"));
         conf.setInt("kafka.limit", Integer.valueOf(cmd.getOptionValue("limit", "-1")));
 
         conf.setBoolean("mapred.map.tasks.speculative.execution", true);
 
-        //Job job = new Job(conf, "Kafka.Consumer");
+//        Job job = new Job(conf, "Kafka.Consumer");
         Job job = Job.getInstance(conf, "Kafka.Consumer");
         job.setJarByClass(getClass());
         job.setMapperClass(KafkaMapper.class);
@@ -91,10 +92,10 @@ public class HadoopConsumer extends Configured implements Tool {
         KafkaOutputFormat.setOutputPath(job, new Path(cmd.getArgs()[0]));
 
         boolean success = job.waitForCompletion(true);
-System.out.println("=====================job_result:" + success + "=====================");
         if (success) {
             commit(conf);
         }
+
         return success ? 0: -1;
     }
 

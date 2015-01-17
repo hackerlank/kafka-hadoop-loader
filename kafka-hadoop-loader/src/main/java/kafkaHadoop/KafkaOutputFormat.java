@@ -31,12 +31,11 @@ public class KafkaOutputFormat<K, V> extends TextOutputFormat<K, V> {
                 (FileOutputCommitter) getOutputCommitter(context);
         JobID jobId = context.getJobID();
 
-Configuration conf = context.getConfiguration();
-String topic = conf.get("kafka.topic");
-System.out.println("-------------------*----------------" + topic);
+        Configuration conf = context.getConfiguration();
+        String topic = conf.get("kafka.topic");
 
         return new Path(committer.getWorkPath(),
-                getUniqueFile(context, "part-" + jobId.toString().replace("job_", ""),
+                getUniqueFile(context, topic + "-part-" + jobId.toString().replace("job_", ""),
                         extension));
     }
 

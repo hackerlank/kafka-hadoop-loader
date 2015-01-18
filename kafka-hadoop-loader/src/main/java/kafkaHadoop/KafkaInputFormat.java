@@ -26,12 +26,27 @@ public class KafkaInputFormat extends InputFormat<LongWritable, BytesWritable> {
 
     static Logger LOG = LoggerFactory.getLogger(KafkaInputFormat.class);
 
+    /**
+     * Create a record reader for a given split.
+     * @param arg0
+     * @param arg1
+     * @return
+     * @throws IOException
+     * @throws InterruptedException
+     */
     @Override
     public RecordReader<LongWritable, BytesWritable> createRecordReader(InputSplit arg0, TaskAttemptContext arg1) throws IOException,
             InterruptedException {
         return new KafkaRecordReader() ;
     }
 
+    /**
+     * Logically split the set of input files for the job.
+     * @param context
+     * @return
+     * @throws IOException
+     * @throws InterruptedException
+     */
     @Override
     public List<InputSplit> getSplits(JobContext context) throws IOException,
             InterruptedException {
@@ -54,8 +69,11 @@ public class KafkaInputFormat extends InputFormat<LongWritable, BytesWritable> {
         return splits;
     }
 
-    public static class KafkaSplit extends InputSplit implements Writable {
 
+    /**
+     * represents the data to be processed by an individual Mapper
+     */
+    public static class KafkaSplit extends InputSplit implements Writable {
         private String brokerId;
         private String broker;
         private int partition;
@@ -71,6 +89,12 @@ public class KafkaInputFormat extends InputFormat<LongWritable, BytesWritable> {
             this.topic = topic;
             this.lastCommit = lastCommit;
         }
+
+        /**
+         * 读取
+         * @param in
+         * @throws IOException
+         */
         @Override
         public void readFields(DataInput in) throws IOException {
             brokerId = Text.readString(in);
@@ -80,6 +104,11 @@ public class KafkaInputFormat extends InputFormat<LongWritable, BytesWritable> {
             lastCommit = in.readLong();
         }
 
+        /**
+         * 写入
+         * @param out
+         * @throws IOException
+         */
         @Override
         public void write(DataOutput out) throws IOException {
             Text.writeString(out, brokerId);
@@ -89,32 +118,39 @@ public class KafkaInputFormat extends InputFormat<LongWritable, BytesWritable> {
             out.writeLong(lastCommit);
         }
 
+        /**
+         * get the size of the split
+         * @return
+         * @throws IOException
+         * @throws InterruptedException
+         */
         @Override
         public long getLength() throws IOException, InterruptedException {
             return Long.MAX_VALUE;
         }
 
+        /**
+         * Get the list of nodes by name where the data for the split would be local.
+         * @return
+         * @throws IOException
+         * @throws InterruptedException
+         */
         @Override
         public String[] getLocations() throws IOException, InterruptedException {
             return new String[] {broker};
         }
-
         public String getBrokerId() {
             return brokerId;
         }
-
         public String getBroker() {
             return broker;
         }
-
         public int getPartition() {
             return partition;
         }
-
         public String getTopic() {
             return topic;
         }
-
         public long getLastCommit() {
             return lastCommit;
         }
@@ -125,18 +161,38 @@ public class KafkaInputFormat extends InputFormat<LongWritable, BytesWritable> {
         }
     }
 
+    /**
+     * 用于Kafka的RecordReader类
+     * RecordReader: breaks the data into key/value pairs
+     */
     public static class KafkaRecordReader extends RecordReader<LongWritable, BytesWritable> {
-
+        /**
+         * Kafka上下文
+         */
         private KafkaContext kcontext;
+        /**
+         * Kafka分隔符
+         */
         private KafkaSplit ksplit;
+        /**
+         * Hadoop job context
+         */
         private TaskAttemptContext context;
+
         private int limit;
+
         private LongWritable key;
+
         private BytesWritable value;
+
         private long start;
+
         private long end;
+
         private long pos;
+
         private long count = 0L;
+
         @Override
         public void initialize(InputSplit split, TaskAttemptContext context)
                 throws IOException, InterruptedException {
@@ -146,12 +202,11 @@ public class KafkaInputFormat extends InputFormat<LongWritable, BytesWritable> {
             Configuration conf = context.getConfiguration();
             limit = conf.getInt("kafka.limit", -1);
 
-
             int timeout = conf.getInt("kafka.socket.timeout.ms", 30000);
             int bsize = conf.getInt("kafka.socket.buffersize", 64*1024);
             int fsize = conf.getInt("kafka.fetch.size", 1024 * 1024);
             String reset = conf.get("kafka.autooffset.reset");
-System.out.println("");
+
             kcontext = new KafkaContext(ksplit.getBrokerId() + ":" + ksplit.getBroker(),
                     ksplit.getTopic(),
                     ksplit.getPartition(),
@@ -171,6 +226,10 @@ System.out.println("");
             commit();
         }
 
+        /**
+         * 提交split之后的key/value pairs，提交zookeeper偏移量信息
+         * @throws IOException
+         */
         private void commit() throws IOException {
             if (count == 0L) return;
             Configuration conf = context.getConfiguration();
@@ -210,26 +269,21 @@ System.out.println("");
 
         @Override
         public boolean nextKeyValue() throws IOException, InterruptedException {
-
             if (key == null) {
                 key = new LongWritable();
             }
             if (value == null) {
                 value = new BytesWritable();
             }
-System.out.println("==============0===============");
-System.out.println(key + " " + value);
-            if (limit < 0 || count < limit) {
 
+            if (limit < 0 || count < limit) {
                 long next = kcontext.getNext(key, value);
-System.out.println("(((((((((((((((((" + next + "))))))))))))))");
                 if (next >= 0) {
                     pos = next;
                     count++;
                     return true;
                 }
             }
-
             LOG.info("Next Offset " + pos);
 
             return false;

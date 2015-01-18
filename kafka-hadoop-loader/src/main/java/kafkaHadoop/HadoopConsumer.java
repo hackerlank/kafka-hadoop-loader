@@ -1,6 +1,5 @@
 package kafkaHadoop;
 
-import java.io.File;
 import java.io.IOException;
 
 import org.apache.commons.cli.CommandLine;
@@ -16,6 +15,7 @@ import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
@@ -29,12 +29,15 @@ public class HadoopConsumer extends Configured implements Tool {
 //        Configuration.addDefaultResource("mapred-site.xml");
 //    }
 
+    /**
+     * Mapper for Kafka
+     */
     public static class KafkaMapper extends Mapper<LongWritable, BytesWritable, LongWritable, Text> {
         @Override
         public void map(LongWritable key, BytesWritable value, Context context) throws IOException {
             Text out = new Text();
             try {
-                out.set(value.getBytes(),0, value.getLength());
+                out.set(value.getBytes(), 0, value.getLength());
                 context.write(key, out);
 
             } catch (InterruptedException e) {
@@ -42,60 +45,103 @@ public class HadoopConsumer extends Configured implements Tool {
                 e.printStackTrace();
             }
         }
+    }
 
+    /**
+     * Reducer for Kafka
+     */
+    public static class KafkaReducer extends Reducer<LongWritable, Text, LongWritable, Text> {
+        private Text result = new Text();
+        @Override
+        public void reduce(LongWritable key, Iterable<Text> values, Context context) throws IOException {
+            try {
+                for (Text val : values) {
+                    result.set(val);
+                    context.write(key, result);
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     public int run(String[] args) throws Exception {
-
-        //ToolRunner.printGenericCommandUsage(System.err);
-        /*
-        if (args.length < 2) {
-            ToolRunner.printGenericCommandUsage(System.err);
-            return -1;
-        }
-        */
+//        ToolRunner.printGenericCommandUsage(System.err);
+//
+//        if (args.length < 2) {
+//            ToolRunner.printGenericCommandUsage(System.err);
+//            return -1;
+//        }
 
         CommandLineParser parser = new PosixParser();
         Options options = buildOptions();
 
         CommandLine cmd = parser.parse(options, args);
 
-        //HelpFormatter formatter = new HelpFormatter();
-        //formatter.printHelp( "kafka.consumer.hadoop", options );
+        //String topic2process = cmd.getOptionValue("topic", "adrealtime,dailyremain,gbill,gcurrencypreserve,glogin," +
+        //        "gloginreq,glvdist,gobj,gonline,greg,gscene,gtask");
+        String topic2process = cmd.getOptionValue("topic", "gbill,mbill,mlevel, mlogin");
 
-        //Configuration conf = getConf();
-        Configuration conf = new Configuration();
+        String[] topicsList = topic2process.split(",");
+System.out.println(topicsList);
 
-        conf.set("kafka.topic", cmd.getOptionValue("topic", "test2"));
-        conf.set("kafka.groupid", cmd.getOptionValue("consumer-group", "test_group"));
-        conf.set("kafka.zk.connect", cmd.getOptionValue("zk-connect", "localhost:2182"));
-        if (cmd.getOptionValue("autooffset-reset") != null)
-            conf.set("kafka.autooffset.reset", cmd.getOptionValue("autooffset-reset"));
-        conf.setInt("kafka.limit", Integer.valueOf(cmd.getOptionValue("limit", "-1")));
+        Boolean overall_success = true;
 
-        conf.setBoolean("mapred.map.tasks.speculative.execution", true);
+        for (String topic: topicsList) {
+            topic = topic.trim();
 
-        //Job job = new Job(conf, "Kafka.Consumer");
-        Job job = Job.getInstance(conf, "Kafka.Consumer");
-        job.setJarByClass(getClass());
-        job.setMapperClass(KafkaMapper.class);
-        // input
-        job.setInputFormatClass(KafkaInputFormat.class);
-        // output
-        job.setOutputKeyClass(LongWritable.class);
-        job.setOutputValueClass(Text.class);
-        job.setOutputFormatClass(KafkaOutputFormat.class);
+System.out.println("===================================================");
+System.out.println("==========Now Start Processing topic:" + topic + "==========");
+System.out.println("===================================================");
 
-        job.setNumReduceTasks(0);
+            //        HelpFormatter formatter = new HelpFormatter();
+            //        formatter.printHelp( "kafka.consumer.hadoop", options );
 
-        KafkaOutputFormat.setOutputPath(job, new Path(cmd.getArgs()[0]));
+            //        Configuration conf = getConf();
+            Configuration conf = new Configuration();
 
-        boolean success = job.waitForCompletion(true);
-System.out.println("=====================job_result:" + success + "=====================");
-        if (success) {
-            commit(conf);
+            String reducerNum = cmd.getOptionValue("reducer-num", "2");
+
+            conf.set("kafka.topic", topic);
+            conf.set("kafka.groupid", cmd.getOptionValue("consumer-group", "kafka2hdfa_id1"));
+            conf.set("kafka.zk.connect", cmd.getOptionValue("zk-connect", "localhost:2182"));
+            conf.set("Mapreduce.reducer.num", reducerNum);
+
+            if (cmd.getOptionValue("autooffset-reset") != null)
+                conf.set("kafka.autooffset.reset", cmd.getOptionValue("autooffset-reset"));
+            conf.setInt("kafka.limit", Integer.valueOf(cmd.getOptionValue("limit", "-1")));
+
+            conf.setBoolean("mapred.map.tasks.speculative.execution", true);
+
+            //        Job job = new Job(conf, "Kafka.Consumer");
+            Job job = Job.getInstance(conf, "Kafka2hdfs");
+            job.setJarByClass(getClass());
+            job.setMapperClass(KafkaMapper.class);
+            job.setCombinerClass(KafkaReducer.class);
+            job.setReducerClass(KafkaReducer.class);
+            // input
+            job.setInputFormatClass(KafkaInputFormat.class);
+            // output
+            job.setOutputKeyClass(LongWritable.class);
+            job.setOutputValueClass(Text.class);
+            job.setOutputFormatClass(KafkaOutputFormat.class);
+
+            job.setNumReduceTasks(Integer.parseInt(reducerNum));
+
+            KafkaOutputFormat.setOutputPath(job, new Path(cmd.getArgs()[0]));
+
+            boolean success = job.waitForCompletion(true);
+            if (success) {
+                commit(conf);
+            } else {
+                overall_success = false;
+System.out.println("===================================================");
+System.out.println("==========ERROR: topic process failure:" + topic + "==========");
+System.out.println("===================================================");
+            }
         }
-        return success ? 0: -1;
+
+        return overall_success ? 0: -1;
     }
 
     private void commit(Configuration conf) throws IOException {
@@ -146,6 +192,11 @@ System.out.println("=====================job_result:" + success + "=============
                 .withDescription("kafka limit")
                 .create("l"));
 
+        options.addOption(OptionBuilder.withArgName("reducernum")
+                .withLongOpt("reducer-num")
+                .hasArg()
+                .withDescription("number of reducers to run")
+                .create("rn"));
 
         return options;
     }

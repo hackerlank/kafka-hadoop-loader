@@ -35,26 +35,48 @@ public class KafkaContext implements Closeable {
 
     private static Logger LOG = LoggerFactory.getLogger(KafkaContext.class);
 
-    SimpleConsumer consumer ;
+    SimpleConsumer consumer;
+
     String topic;
+
     int partition;
+
     long startOffset = -1L;
+
     long lastOffset = -1L;
+
     long curOffset;
+
     int fetchSize;
+
     ByteBufferMessageSet messages;
+
     Iterator<MessageAndOffset> iterator;
+
     final ArrayBlockingQueue<ByteBufferMessageSet> queue;
+
     final FetchThread fetcher;
+
     String clientName = "testtesttesttest";
 
-    public KafkaContext(String broker, String topic,
-                        int partition, long lastCommit,int fetchSize, int timeout, int bufferSize,
-                        String reset) {
-this.clientName = "Client_" + topic + "_" + partition;
+    /**
+     * 构造函数
+     * @param broker
+     * @param topic
+     * @param partition
+     * @param lastCommit
+     * @param fetchSize
+     * @param timeout
+     * @param bufferSize
+     * @param reset
+     */
+    public KafkaContext(String broker, String topic, int partition, long lastCommit,
+                        int fetchSize, int timeout, int bufferSize, String reset) {
+        this.clientName = "Client_" + topic + "_" + partition;
         String[] sp = broker.split(":"); // broker-id:host:port
-System.out.println("```````````SimpleConsumer params:" + sp[1] + " " + sp[2] + " " + timeout + " " + bufferSize + " " + clientName);
+
         consumer = new SimpleConsumer(sp[1], Integer.valueOf(sp[2]), timeout, bufferSize, clientName);
+
         this.topic = topic;
         this.partition = partition;
         this.startOffset = lastCommit;
@@ -62,15 +84,119 @@ System.out.println("```````````SimpleConsumer params:" + sp[1] + " " + sp[2] + "
         this.lastOffset = getLastOffset();
         this.fetchSize = fetchSize;
 
-
         resetOffset(reset, sp[0], partition);
-
 
         queue = new ArrayBlockingQueue<ByteBufferMessageSet>(5);
         fetcher = new FetchThread(consumer, queue, topic, partition, curOffset, fetchSize);
         fetcher.start();
     }
 
+    @Override
+    public void close() throws IOException {
+        fetcher.stop = true;
+        //fetcher.interrupt();
+        while (!fetcher.stopped);
+        consumer.close();
+    }
+
+    /**
+     * 获取下一条消息，设置key和value
+     * @param key
+     * @param value
+     * @return 当前偏移量
+     * @throws IOException
+     */
+    public long getNext(LongWritable key, BytesWritable value) throws IOException {
+        if ( !hasMore() ) return -1L;
+        MessageAndOffset messageOffset = iterator.next();
+        Message message = messageOffset.message();
+
+        key.set(curOffset);
+        curOffset = messageOffset.offset();
+
+//        byte[] bytes = new byte[message.payloadSize()];
+//        message.payload().get(bytes);
+//        value.set(bytes, 0, message.payloadSize());
+        ByteBuffer buffer = message.payload();
+
+        value.set(buffer.array(), buffer.arrayOffset(), message.payloadSize());
+
+        byte[] bytes = new byte[buffer.limit()];
+        buffer.get(bytes);
+
+        return curOffset;
+    }
+
+    /**
+     * 获取起始偏移值
+     * @return
+     */
+    public long getStartOffset() {
+        if (startOffset <= 0) {
+            startOffset = getLastOffset(consumer, topic, partition, kafka.api.OffsetRequest.EarliestTime(), clientName);
+            //startOffset = consumer.getOffsetsBefore(topic, partition, -2L, 1)[0];
+        }
+        return startOffset;
+    }
+
+    /**
+     * 设置起始偏移量
+     * @param offset
+     */
+    public void setStartOffset(long offset) {
+        if (offset <= 0) {
+            offset = getLastOffset(consumer, topic, partition, kafka.api.OffsetRequest.EarliestTime(), clientName);
+            //offset = consumer.getOffsetsBefore(topic, partition, -2L, 1)[0];
+            LOG.info("Smallest Offset {}", offset);
+        }
+        curOffset = startOffset = offset;
+    }
+
+    /**
+     * 获取最新偏移量
+     * @return
+     */
+    public long getLastOffset() {
+        if (lastOffset <= 0) {
+            lastOffset = getLastOffset(consumer, topic, partition, kafka.api.OffsetRequest.LatestTime(), clientName);
+            //lastOffset = consumer.getOffsetsBefore(topic, partition, -1L, 1)[0];
+        }
+        return lastOffset;
+    }
+
+    /**
+     * 获取最新的偏移量
+     * @param consumer
+     * @param topic
+     * @param partition
+     * @param whichTime
+     * @param clientName
+     * @return
+     */
+    public static long getLastOffset(SimpleConsumer consumer, String topic, int partition,
+                                     long whichTime, String clientName) {
+        TopicAndPartition topicAndPartition = new TopicAndPartition(topic, partition);
+        Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo = new HashMap<TopicAndPartition, PartitionOffsetRequestInfo>();
+        requestInfo.put(topicAndPartition, new PartitionOffsetRequestInfo(whichTime, 1));
+        kafka.javaapi.OffsetRequest request = new kafka.javaapi.OffsetRequest(
+                requestInfo, kafka.api.OffsetRequest.CurrentVersion(), clientName);
+        OffsetResponse response = consumer.getOffsetsBefore(request);
+
+        if (response.hasError()) {
+            System.out.println("Error fetching data Offset Data the Broker. Reason: " + response.errorCode(topic, partition) );
+            return 0;
+        }
+        long[] offsets = response.offsets(topic, partition);
+        return offsets[0];
+    }
+
+
+    /**
+     * 重置偏移值
+     * @param reset
+     * @param brokerId
+     * @param partition
+     */
     private void resetOffset(String reset, String brokerId, int partition) {
         if (reset == null) return;
         LOG.info("RESET {} {} {}", new Object[]{reset, brokerId, partition});
@@ -93,17 +219,12 @@ System.out.println("```````````SimpleConsumer params:" + sp[1] + " " + sp[2] + "
         }
     }
 
-    @Override
-    public void close() throws IOException {
-        fetcher.stop = true;
-        //fetcher.interrupt();
-        while (!fetcher.stopped);
-        consumer.close();
-    }
 
+    /**
+     * 是否有更多消息
+     * @return
+     */
     private boolean hasMore() {
-System.out.println("***********hasMore.iterator");
-System.out.println(iterator);
         if (iterator == null) {
             fetchMore();
             if (iterator == null) {
@@ -119,8 +240,10 @@ System.out.println(iterator);
         }
     }
 
+    /**
+     * 抓取队列中的消息，设置全局消息迭代器为当前获取消息的迭代器
+     */
     private void fetchMore() {
-
         while(!fetcher.stop || !queue.isEmpty()) {
             messages = queue.poll();
             if (messages != null) {
@@ -134,87 +257,31 @@ System.out.println(iterator);
         }
     }
 
-    public long getNext(LongWritable key, BytesWritable value) throws IOException {
-        if ( !hasMore() ) return -1L;
-        MessageAndOffset messageOffset = iterator.next();
-        Message message = messageOffset.message();
-
-        key.set(curOffset);
-        curOffset = messageOffset.offset();
-
-        //byte[] bytes = new byte[message.payloadSize()];
-        //message.payload().get(bytes);
-        //value.set(bytes, 0, message.payloadSize());
-        ByteBuffer buffer = message.payload();
-        value.set(buffer.array(), buffer.arrayOffset(), message.payloadSize());
-System.out.println("+++++++++++++++++++getNext set value+++++++++++++++++++");
-System.out.println(value);
-
-        byte[] bytes = new byte[buffer.limit()];
-        buffer.get(bytes);
-System.out.println(String.valueOf(new String(bytes, "UTF-8")));
-
-        return curOffset;
-    }
-
-    public long getStartOffset() {
-        if (startOffset <= 0) {
-            startOffset = getLastOffset(consumer, topic, partition, kafka.api.OffsetRequest.EarliestTime(), clientName);
-
-            //startOffset = consumer.getOffsetsBefore(topic, partition, -2L, 1)[0];
-        }
-        return startOffset;
-    }
-
-    public void setStartOffset(long offset) {
-        if (offset <= 0) {
-            offset = getLastOffset(consumer, topic, partition, kafka.api.OffsetRequest.EarliestTime(), clientName);
-            //offset = consumer.getOffsetsBefore(topic, partition, -2L, 1)[0];
-            LOG.info("Smallest Offset {}", offset);
-        }
-        curOffset = startOffset = offset;
-    }
-
-    public long getLastOffset() {
-        if (lastOffset <= 0) {
-            lastOffset = getLastOffset(consumer, topic, partition, kafka.api.OffsetRequest.LatestTime(), clientName);
-            //lastOffset = consumer.getOffsetsBefore(topic, partition, -1L, 1)[0];
-        }
-        return lastOffset;
-    }
-
-    public static long getLastOffset(SimpleConsumer consumer, String topic, int partition,
-                                     long whichTime, String clientName) {
-        TopicAndPartition topicAndPartition = new TopicAndPartition(topic, partition);
-        Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo = new HashMap<TopicAndPartition, PartitionOffsetRequestInfo>();
-        requestInfo.put(topicAndPartition, new PartitionOffsetRequestInfo(whichTime, 1));
-        kafka.javaapi.OffsetRequest request = new kafka.javaapi.OffsetRequest(
-                requestInfo, kafka.api.OffsetRequest.CurrentVersion(), clientName);
-        OffsetResponse response = consumer.getOffsetsBefore(request);
-
-        if (response.hasError()) {
-            System.out.println("Error fetching data Offset Data the Broker. Reason: " + response.errorCode(topic, partition) );
-            return 0;
-        }
-        long[] offsets = response.offsets(topic, partition);
-        return offsets[0];
-    }
-
 
     static class FetchThread extends Thread {
-
         String topic;
+
         int partition;
+
         long offset;
+
         int fetchSize;
+
         SimpleConsumer consumer ;
+
         public volatile boolean stop = false;
+
         public volatile boolean stopped = false;
-        ArrayBlockingQueue<ByteBufferMessageSet> queue ;
+
+        ArrayBlockingQueue<ByteBufferMessageSet> queue;
+
         boolean hasData = false;
+
         ByteBufferMessageSet messages = null;
+
         FetchResponse fetchResponse = null;
-        String clientName;// = "testtesttesttest";
+
+        String clientName;                  // = "testtesttesttest";
 
         public FetchThread(SimpleConsumer consumer, ArrayBlockingQueue<ByteBufferMessageSet> queue,
                            String topic, int partition, long offset, int fetchSize) {
@@ -226,12 +293,12 @@ System.out.println(String.valueOf(new String(bytes, "UTF-8")));
             this.queue = queue;
             this.clientName = "Client_" + topic + "_" + partition;
         }
+
         @Override
         public void run() {
             int numErrors = 0;
-            while (!stop) {
-//System.out.println("%%%%%%%%%%%%%%%%%%%%%FetchRequest params:" + clientName + " " + topic + " " + partition + " " + offset + " " + fetchSize);
 
+            while (!stop) {
                 FetchRequest req = new FetchRequestBuilder()
                         .clientId(clientName)
                         .addFetch(topic, partition, offset, fetchSize)
@@ -296,30 +363,26 @@ System.out.println(String.valueOf(new String(bytes, "UTF-8")));
 //System.out.println(bytes);
 //                }
 
-
-
-
                 messages = fetchResponse.messageSet(topic, partition);
-//System.out.println("#####################fetchResponse.messageSet###########################");
-//System.out.println(messages);
+
                 //int code = messages.getErrorCode();
                 int code = fetchResponse.errorCode(topic, partition);
                 //if (code == 0) {
                 if (!fetchResponse.hasError()) {
-                    if (!queue.offer(messages)){
+                    if (!queue.offer(messages)) {
                         try {
                             Thread.sleep(100);
                         } catch (InterruptedException e) {
                         }
                         continue;
                     }
-//System.out.println(queue);
+
                     hasData = true;
-                    offset += messages.validBytes(); // next offset to fetch
+                    offset += messages.validBytes();            // next offset to fetch
                     LOG.info("Valid bytes {} {}", messages.validBytes(), stop);
                     messages = null;
                 } else if (hasData && code == ErrorMapping.OffsetOutOfRangeCode()) {
-                    // no more data
+                    // means no more data
                     //queue.notify();
                     stop = true;
                     LOG.info("No More Data");

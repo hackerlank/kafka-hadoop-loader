@@ -26,6 +26,8 @@ public class ZkUtils implements Closeable {
     private static final String BROKER_IDS_PATH = "/brokers/ids";
     private static final String BROKER_TOPICS_PATH = "/brokers/topics";
 
+    private static final String CUR_HFILE_TS_PATH = "/kafka2hfile/curhfile/ts";
+
 //    class ZKGroupDirs(val group: String) {
 //      def consumerDir = ZkUtils.ConsumersPath
 //      def consumerGroupDir = consumerDir + "/" + group
@@ -196,6 +198,22 @@ public class ZkUtils implements Closeable {
         }
         return true;
     }
+
+    /**
+     * zookeeper提交当前job id
+     * @param topic
+     * @param startts
+     * @return
+     */
+    public boolean commitCurTs(String topic, String startts) {
+        String path = CUR_HFILE_TS_PATH + '/' + topic;
+        if (!client.exists(path)) {
+            client.createPersistent(path, true);
+        }
+        client.writeData(path, startts);
+        return true;
+    }
+
 
     @Override
     public void close() throws IOException {

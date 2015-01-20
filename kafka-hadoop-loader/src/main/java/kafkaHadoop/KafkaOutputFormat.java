@@ -33,9 +33,10 @@ public class KafkaOutputFormat<K, V> extends TextOutputFormat<K, V> {
 
         Configuration conf = context.getConfiguration();
         String topic = conf.get("kafka.topic");
+        String startts = conf.get("Mapreduce.overalltask.startts");
 
         return new Path(committer.getWorkPath(),
-                getUniqueFile(context, topic + "-part-" + jobId.toString().replace("job_", ""),
+                getUniqueFile(context, topic + "-" + startts + "-part-" + jobId.toString().replace("job_", ""),
                         extension));
     }
 

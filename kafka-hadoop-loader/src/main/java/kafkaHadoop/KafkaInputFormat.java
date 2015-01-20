@@ -41,7 +41,7 @@ public class KafkaInputFormat extends InputFormat<LongWritable, BytesWritable> {
     }
 
     /**
-     * Logically split the set of input files for the job.
+     * Logically split the set of "input files" for the job.
      * @param context
      * @return
      * @throws IOException
@@ -160,6 +160,9 @@ public class KafkaInputFormat extends InputFormat<LongWritable, BytesWritable> {
             return broker + "-" + topic + "-" + partition + "-" + lastCommit ;
         }
     }
+
+
+
 
     /**
      * 用于Kafka的RecordReader类

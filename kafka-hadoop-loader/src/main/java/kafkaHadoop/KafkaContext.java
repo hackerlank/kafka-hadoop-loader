@@ -57,7 +57,7 @@ public class KafkaContext implements Closeable {
 
     final FetchThread fetcher;
 
-    String clientName = "testtesttesttest";
+    String clientName = "kafkaClient";
 
     /**
      * 构造函数

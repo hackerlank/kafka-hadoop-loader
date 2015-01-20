@@ -1,6 +1,7 @@
 package kafkaHadoop;
 
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -83,16 +84,18 @@ public class HadoopConsumer extends Configured implements Tool {
         String topic2process = cmd.getOptionValue("topic", "gbill,mbill,mlevel, mlogin");
 
         String[] topicsList = topic2process.split(",");
-System.out.println(topicsList);
 
         Boolean overall_success = true;
+        Long taskStartTs = System.currentTimeMillis();
+        SimpleDateFormat format = new SimpleDateFormat("yyyyMMdd");
+        String subDir = format.format(taskStartTs);
 
         for (String topic: topicsList) {
             topic = topic.trim();
 
-System.out.println("===================================================");
-System.out.println("==========Now Start Processing topic:" + topic + "==========");
-System.out.println("===================================================");
+            System.out.println("=================================================================");
+            System.out.println("==========Now Start Processing topic:" + topic + "==========");
+            System.out.println("=================================================================");
 
             //        HelpFormatter formatter = new HelpFormatter();
             //        formatter.printHelp( "kafka.consumer.hadoop", options );
@@ -106,6 +109,7 @@ System.out.println("===================================================");
             conf.set("kafka.groupid", cmd.getOptionValue("consumer-group", "kafka2hdfa_id1"));
             conf.set("kafka.zk.connect", cmd.getOptionValue("zk-connect", "localhost:2182"));
             conf.set("Mapreduce.reducer.num", reducerNum);
+            conf.set("Mapreduce.overalltask.startts", taskStartTs.toString());
 
             if (cmd.getOptionValue("autooffset-reset") != null)
                 conf.set("kafka.autooffset.reset", cmd.getOptionValue("autooffset-reset"));
@@ -113,8 +117,10 @@ System.out.println("===================================================");
 
             conf.setBoolean("mapred.map.tasks.speculative.execution", true);
 
+            Long curTs = System.currentTimeMillis();
+
             //        Job job = new Job(conf, "Kafka.Consumer");
-            Job job = Job.getInstance(conf, "Kafka2hdfs");
+            Job job = Job.getInstance(conf, "Kafka2hdfs_" + topic + "_" + curTs.toString());
             job.setJarByClass(getClass());
             job.setMapperClass(KafkaMapper.class);
             job.setCombinerClass(KafkaReducer.class);
@@ -128,16 +134,18 @@ System.out.println("===================================================");
 
             job.setNumReduceTasks(Integer.parseInt(reducerNum));
 
-            KafkaOutputFormat.setOutputPath(job, new Path(cmd.getArgs()[0]));
+            KafkaOutputFormat.setOutputPath(job, new Path(cmd.getArgs()[0] + '/' + subDir));
 
             boolean success = job.waitForCompletion(true);
             if (success) {
+                String jobid = job.getJobID().toString();
+                conf.set("Mapreduce.job.jobid", jobid);
                 commit(conf);
             } else {
                 overall_success = false;
-System.out.println("===================================================");
-System.out.println("==========ERROR: topic process failure:" + topic + "==========");
-System.out.println("===================================================");
+                System.out.println("=================================================================");
+                System.out.println("==========ERROR: topic process failure:" + topic + "==========");
+                System.out.println("=================================================================");
             }
         }
 
@@ -149,7 +157,9 @@ System.out.println("===================================================");
         try {
             String topic = conf.get("kafka.topic");
             String group = conf.get("kafka.groupid");
+            String startts = conf.get("Mapreduce.overalltask.startts");
             zk.commit(group, topic);
+            zk.commitCurTs(topic, startts);
         } catch (Exception e) {
             rollback();
         } finally {
